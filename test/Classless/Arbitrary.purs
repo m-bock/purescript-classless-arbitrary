@@ -1,3 +1,8 @@
+-- # classless-arbitrary
+-- ## Usage
+-- ### Imports
+-- For the examples in this document you'll need the following imports:
+
 module Test.Classless.Arbitrary where
 
 import Prelude
@@ -5,18 +10,16 @@ import Prelude
 import Classless (class Init, class InitRecord, class InitSum, initRecord, initSum, noArgs, (~))
 import Classless.Arbitrary as Arb
 import Control.Alt ((<|>))
-import Control.Monad.Gen (chooseInt)
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe)
 import Data.Tuple (Tuple)
-import Record as Recod
 import Record as Record
-import Test.QuickCheck.Gen (Gen)
+import Test.QuickCheck.Gen (Gen, chooseInt)
 
--- 1. Simple combinators
-
--- Let's assume we have the following somwhow nested type:
+-- ### Simple combinators
+--
+-- Let's assume we have the following somehow nested type:
 
 type Items = Array
   ( Either
@@ -25,7 +28,7 @@ type Items = Array
   )
 
 -- We can define a random generator of type `Gen Items` by reproducing the
--- nesting with those prmitives and combinators:
+-- nesting with those primitives and combinators:
 
 genItems'1 :: Gen Items
 genItems'1 = Arb.array
@@ -43,15 +46,15 @@ genItems'1 = Arb.array
 customInt :: Gen Int
 customInt = chooseInt 10 20
 
--- This library is using quickcheck's `Gen` type, so you can use whatever
+-- This library is using QuickCheck's `Gen` type, so you can use whatever
 -- already exists for this type.
-
--- This works well for homgenous types like Arrays or Maybes. Things get a bit
+--
+-- This works well for homogenous types like Arrays or Maybes. Things get a bit
 -- more interesting when we like to write generators in this
 -- style for heterogenous structures like Records. Let's say we'd like to
 -- generate values for the following record type:
-
--- 2. Record types
+--
+-- ### Record types
 
 type User =
   { name :: String
@@ -74,11 +77,11 @@ genUser'1 = Arb.record
       }
   }
 
--- 3. Generic Sum types
-
+-- ### Generic Sum types
+--
 -- There's a similar construct for ADTs which have a generic instance. This
 -- deserves a bit more explanation. Let's assume we have a `RemoteData` type. A
--- sum type with 4 constructors with some ore none positional arguments.
+-- sum type with 4 constructors each having some or none positional arguments.
 
 data RemoteData
   = NotAsked
@@ -92,9 +95,9 @@ data RemoteData
 derive instance Generic RemoteData _
 
 -- We can now use the `Arb.sum` function with a specification of how each field
--- in the type should be corellated with a generator. If there are no arguments,
+-- in the type should be correlated with a generator. If there are no arguments,
 -- we use `noArgs`. If we have a product of arguments we use the `~` operator to
--- list generators for the field.
+-- list generators for the field. The syntax is inspired by the [routing-duplex package](https://pursuit.purescript.org/packages/purescript-routing-duplex/0.4.1)
 
 genRemoteData'1 :: Gen RemoteData
 genRemoteData'1 = Arb.sum
@@ -108,20 +111,20 @@ genRemoteData'1 = Arb.sum
   }
 
 -- Of course, the above only compiles if all constructors are specified with the
--- correct labeles and all the other types align to the target type.
-
---- 4. Roll your own typeclass
-
+-- correct labels and all the other types align to the target type.
+--
+--- ### Roll your own type class
+--
 -- At this moment we have some powerful combinators to create Generators for
 -- most of the common data structures that we use in a program. And we have fine
 -- grained control over how each piece of a type should be generated. The
 -- downside of it is, that it we have to manually write the Generators for each
 -- type. As the name suggests, this "classless" package does not provide a
--- typeclass. But you can define a typeclass yourself. And the package is
--- desigend to make this as boilerplate free as possible. The advantage of
--- defining the typeclass at your side is that you can write instances for every
--- type without the headache of orpahn intances ans newtype wrappers.
-
+-- type class. But you can define a type class yourself. And the package is
+-- designed to make this as boilerplate free as possible. The advantage of
+-- defining the type class at your side is that you can write instances for every
+-- type without the headache of orphan instances ans Newtype wrappers.
+--
 -- Let's see how this works:
 
 class MyArbitrary a where
@@ -148,18 +151,18 @@ instance (MyArbitrary a, MyArbitrary b) => MyArbitrary (Either a b) where
 instance (MyArbitrary a, MyArbitrary b) => MyArbitrary (Tuple a b) where
   arbitrary = Arb.tuple arbitrary arbitrary
 
--- So far this, should be quite familar and not surprising. We defined instances
+-- So far this, should be quite familiar and not surprising. We defined instances
 -- for a couple of concrete types like String or Boolean. As well as a couple of
 -- combined types like `Array a` which refer to our instance to fill the values
 -- of the generic type parameters. This does not work that easily for constructs
 -- like records. Because they're complete heterogenous, meaning they can contain an
 -- arbitrary amount of different types. Now we need a trick to "pass" our own
--- typeclass implementation to a generic function that traverses the record
+-- type class implementation to a generic function that traverses the record
 -- fields. The concept that is used here is inspired by the [heterogeneous
 -- package](https://github.com/thought2/purescript-heterogeneous) and is well
 -- documented in the libraries README.
-
--- We define a "dummy" data type and write an instance of the `Init` typeclass
+--
+-- We define a "dummy" data type and write an instance of the `Init` type class
 -- for it:
 
 data MyInit = MyInit
@@ -193,31 +196,31 @@ genUser'2 = arbitrary
 genRemoteData'2 :: Gen RemoteData
 genRemoteData'2 = genericSum
 
--- 5. Combine both approache to get the best of both worlds
-
+-- ### Combine both approaches to get the best of both worlds
+--
 -- This is very convenient but what we lose here is the ability to define
 -- different generators for the same types that somewhere occur. Every integer
--- is generated in the same way and without newtype wrappers there's no way to
+-- is generated in the same way and without Newtype wrappers there's no way to
 -- opt in for the `chooseInt` implementation that is explained above.
-
--- Depending on the usecase we can chose the one or the other approach. But
+--
+-- Depending on the use case we can chose the one or the other approach. But
 -- wouldn't it be nice to have a combination of both somehow?
-
+--
 -- Let's try to write a Generator for the `User` record type above where every
--- field except one is derived by the typeclass.
+-- field except one is derived by the type class.
 
 genUser'' :: Gen User
 genUser'' = Arb.record
-  $ Recod.union
+  $ Record.union
       { age: chooseInt 0 100
       }
   $ initRecord MyInit
 
--- `initRecord` initializes the fields for us based on our typeclass. Howver,
+-- `initRecord` initializes the fields for us based on our type class. However,
 -- before we pass field specification to the `Arb.record` function, we just
 -- merge it with our manually defined subset of the spec and there we go.
 -- The inference is optimized in such a way that this even works if the types
--- that you specify manually have no instances in for your typeclass. As you can
+-- that you specify manually have no instances in for your type class. As you can
 -- see below, the int is generated by the type class that for char there's no
 -- instance so we have to merge it into the spec:
 
