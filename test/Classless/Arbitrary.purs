@@ -2,113 +2,262 @@ module Test.Classless.Arbitrary where
 
 import Prelude
 
-import Classless (class Init, class InitIt, initIt, initRecord, initSum, sequenceProduct, sequenceRecord, (~))
-import Classless.Arbitrary (Arbitrary)
+import Classless (class Init, class InitRecord, class InitSum, initRecord, initSum, noArgs, (~))
 import Classless.Arbitrary as Arb
-import Data.Function as F
-import Data.Generic.Rep (class Generic, Argument(..))
-import Data.Maybe (Maybe(..))
-import Data.Tuple.Nested (type (/\), (/\))
-import Heterogeneous.Mapping (class Mapping, class MappingWithIndex, hmap, hmapWithIndex, mappingWithIndex)
-import Record (union)
-import Record as R
+import Control.Alt ((<|>))
+import Control.Monad.Gen (chooseInt)
+import Data.Either (Either)
+import Data.Generic.Rep (class Generic)
+import Data.Maybe (Maybe)
+import Data.Tuple (Tuple)
+import Record as Recod
+import Record as Record
 import Test.QuickCheck.Gen (Gen)
-import Unsafe.Coerce (unsafeCoerce)
 
-type Foo =
-  { foo :: Int
-  , bar :: Maybe String
-  --  , baz :: Array Boolean
-  --  , points :: Array { x :: Int, y :: Int }
+-- 1. Simple combinators
+
+-- Let's assume we have the following somwhow nested type:
+
+type Items = Array
+  ( Either
+      String
+      (Tuple Int Boolean)
+  )
+
+-- We can define a random generator of type `Gen Items` by reproducing the
+-- nesting with those prmitives and combinators:
+
+genItems'1 :: Gen Items
+genItems'1 = Arb.array
+  ( Arb.either
+      Arb.string
+      (Arb.tuple Arb.int Arb.boolean)
+  )
+
+-- The advantage of this approach is that we have full control over how each
+-- piece of the type is generated. E.g. the `Arb.int` combinator will generate
+-- Integers in some defined default range. But we can replace it with any other
+-- generator of type `Gen Int`, maybe with one that can be configured to produce
+-- values in a different range.  
+
+customInt :: Gen Int
+customInt = chooseInt 10 20
+
+-- This library is using quickcheck's `Gen` type, so you can use whatever
+-- already exists for this type.
+
+-- This works well for homgenous types like Arrays or Maybes. Things get a bit
+-- more interesting when we like to write generators in this
+-- style for heterogenous structures like Records. Let's say we'd like to
+-- generate values for the following record type:
+
+-- 2. Record types
+
+type User =
+  { name :: String
+  , age :: Int
+  , loggedIn :: Boolean
+  , coordinates :: Array { x :: Int, y :: Int }
   }
 
-sample :: Arbitrary Foo
-sample = Arb.record $ identity
-  { foo: arbitrary -- Arb.int
-  , bar: Arb.maybe Arb.string
-  -- , baz: Arb.array Arb.boolean
-  -- , points: Arb.array $ Arb.record $ identity { x: arbitrary, y: Arb.int }
+-- The least boilerplate we archive by using the generic `Arb.record` function
+-- like below:
+
+genUser'1 :: Gen User
+genUser'1 = Arb.record
+  { name: Arb.string
+  , age: Arb.int
+  , loggedIn: Arb.boolean
+  , coordinates: Arb.array $ Arb.record
+      { x: Arb.int
+      , y: Arb.int
+      }
   }
 
-sample22 :: Arbitrary Foo
-sample22 = Arb.record $ myInit
+-- 3. Generic Sum types
 
-class Default a where
-  def :: a
+-- There's a similar construct for ADTs which have a generic instance. This
+-- deserves a bit more explanation. Let's assume we have a `RemoteData` type. A
+-- sum type with 4 constructors with some ore none positional arguments.
 
-instance Default (Maybe Int) where
-  def = Just 1
+data RemoteData
+  = NotAsked
+  | Loading Int Int Int
+  | Error String
+  | Success
+      { status :: Int
+      , body :: String
+      }
 
-instance Default (Int) where
-  def = 1
+derive instance Generic RemoteData _
 
--- xzz :: Maybe  { a :: Int}
--- xzz = RE.sequenceRecord $ identity { a : def }
+-- We can now use the `Arb.sum` function with a specification of how each field
+-- in the type should be corellated with a generator. If there are no arguments,
+-- we use `noArgs`. If we have a product of arguments we use the `~` operator to
+-- list generators for the field.
 
-data Fooo = Fooo
-
-instance Mapping Fooo Int String where
-  mapping _ _ = ""
-
--- sss :: String /\  String
--- sss = hmap Fooo (def unit /\ 2 )
-
-data Baz
-  = Foo Int (Maybe String)
-  | Bar Boolean
-  | Baz (Array { x :: Int, y :: Int })
-
-derive instance Generic Baz _
-
-sample3 :: Arbitrary Baz
-sample3 = Arb.sum
-  { "Foo": arbitrary ~ Arb.maybe Arb.string
-  , "Bar": Arb.boolean
-  , "Baz": Arb.array $ Arb.record $ identity { x: arbitrary, y: Arb.int }
+genRemoteData'1 :: Gen RemoteData
+genRemoteData'1 = Arb.sum
+  { "NotAsked": noArgs
+  , "Loading": Arb.int ~ Arb.int ~ Arb.int
+  , "Error": Arb.string
+  , "Success": Arb.record
+      { status: Arb.int
+      , body: Arb.string
+      }
   }
 
--- sample33 :: Arbitrary Baz
--- sample33 = Arb.sum
---   { "Foo": arbitrary ~ Arb.maybe Arb.string
---   , "Bar": Arb.boolean
---   , "Baz": Arb.array $ Arb.record $ identity { x: arbitrary, y: Arb.int }
---   }
+-- Of course, the above only compiles if all constructors are specified with the
+-- correct labeles and all the other types align to the target type.
 
-xx :: Gen Int
-xx = arbitrary
+--- 4. Roll your own typeclass
 
-data Abc = Abc String | Xyz Int
+-- At this moment we have some powerful combinators to create Generators for
+-- most of the common data structures that we use in a program. And we have fine
+-- grained control over how each piece of a type should be generated. The
+-- downside of it is, that it we have to manually write the Generators for each
+-- type. As the name suggests, this "classless" package does not provide a
+-- typeclass. But you can define a typeclass yourself. And the package is
+-- desigend to make this as boilerplate free as possible. The advantage of
+-- defining the typeclass at your side is that you can write instances for every
+-- type without the headache of orpahn intances ans newtype wrappers.
 
-derive instance Generic Abc _
+-- Let's see how this works:
 
-sample33 :: Arbitrary Abc
-sample33 = Arb.sum $ myInit
-
-sample2 :: Arbitrary { a :: Int, b :: Int, c :: String }
-sample2 = Arb.record $ union { c: Arb.string } myInit
-
-x :: { foo :: Gen Int }
-x = initRecord I
-
-data I = I
-
-instance (UserArbitrary a) => Init I (Gen a) where
-  init _ = arbitrary
-
-class UserArbitrary a where
+class MyArbitrary a where
   arbitrary :: Gen a
 
-instance (UserArbitrary a) => UserArbitrary (Maybe a) where
-  arbitrary = Arb.maybe arbitrary
-
-instance UserArbitrary String where
-  arbitrary = Arb.string
-
-instance UserArbitrary Int where
+instance MyArbitrary Int where
   arbitrary = Arb.int
 
-class MyInit a where
-  myInit :: a
+instance MyArbitrary String where
+  arbitrary = Arb.string
 
-instance (InitIt I a) => MyInit a where
-  myInit = initIt I
+instance MyArbitrary Boolean where
+  arbitrary = Arb.boolean
+
+instance (MyArbitrary a) => MyArbitrary (Array a) where
+  arbitrary = Arb.array arbitrary
+
+instance (MyArbitrary a) => MyArbitrary (Maybe a) where
+  arbitrary = Arb.maybe arbitrary
+
+instance (MyArbitrary a, MyArbitrary b) => MyArbitrary (Either a b) where
+  arbitrary = Arb.either arbitrary arbitrary
+
+instance (MyArbitrary a, MyArbitrary b) => MyArbitrary (Tuple a b) where
+  arbitrary = Arb.tuple arbitrary arbitrary
+
+-- So far this, should be quite familar and not surprising. We defined instances
+-- for a couple of concrete types like String or Boolean. As well as a couple of
+-- combined types like `Array a` which refer to our instance to fill the values
+-- of the generic type parameters. This does not work that easily for constructs
+-- like records. Because they're complete heterogenous, meaning they can contain an
+-- arbitrary amount of different types. Now we need a trick to "pass" our own
+-- typeclass implementation to a generic function that traverses the record
+-- fields. The concept that is used here is inspired by the [heterogeneous
+-- package](https://github.com/thought2/purescript-heterogeneous) and is well
+-- documented in the libraries README.
+
+-- We define a "dummy" data type and write an instance of the `Init` typeclass
+-- for it:
+
+data MyInit = MyInit
+
+instance (MyArbitrary a) => Init MyInit (Gen a) where
+  init _ = arbitrary
+
+-- Now we habe everything we need to define a typeclass instance for records
+-- like this:
+
+instance (Arb.Record r' r, InitRecord MyInit r') => MyArbitrary (Record r) where
+  arbitrary = Arb.record $ initRecord MyInit
+
+-- And for sum types we can define the following helper functions which may be
+-- familiar to you (see e.g. genericShow)
+
+genericSum :: forall r' a. Arb.Sum r' a => InitSum MyInit r' => Gen a
+genericSum = Arb.sum $ initSum MyInit
+
+-- It does not matter if you habe not fully understood the details of the
+-- previous section. It's just important to not that we have created a type
+-- class that is able to produce the three sample Generators we defined earlier
+-- completely generically: 
+
+genItems'2 :: Gen Items
+genItems'2 = arbitrary
+
+genUser'2 :: Gen User
+genUser'2 = arbitrary
+
+genRemoteData'2 :: Gen RemoteData
+genRemoteData'2 = genericSum
+
+-- 5. Combine both approache to get the best of both worlds
+
+-- This is very convenient but what we lose here is the ability to define
+-- different generators for the same types that somewhere occur. Every integer
+-- is generated in the same way and without newtype wrappers there's no way to
+-- opt in for the `chooseInt` implementation that is explained above.
+
+-- Depending on the usecase we can chose the one or the other approach. But
+-- wouldn't it be nice to have a combination of both somehow?
+
+-- Let's try to write a Generator for the `User` record type above where every
+-- field except one is derived by the typeclass.
+
+genUser'' :: Gen User
+genUser'' = Arb.record
+  $ Recod.union
+      { age: chooseInt 0 100
+      }
+  $ initRecord MyInit
+
+-- `initRecord` initializes the fields for us based on our typeclass. Howver,
+-- before we pass field specification to the `Arb.record` function, we just
+-- merge it with our manually defined subset of the spec and there we go.
+-- The inference is optimized in such a way that this even works if the types
+-- that you specify manually have no instances in for your typeclass. As you can
+-- see below, the int is generated by the type class that for char there's no
+-- instance so we have to merge it into the spec:
+
+genAB :: Gen { a :: Int, b :: Char }
+genAB = Arb.record
+  $ Record.union
+      { b: Arb.char
+      }
+  $ initRecord MyInit
+
+-- The same patten works for sum types, too! Let's try to do the same with the
+-- `RemoteData` sample. Let's say we only want a custom generator for the
+-- `Error` case.
+
+genRemoteData'3 :: Gen RemoteData
+genRemoteData'3 = Arb.sum
+  $ Record.union
+      { "Error": pure "error one" <|> pure "error two"
+      }
+  $ initSum MyInit
+
+-- We can even provide a Generator only for one field of a product:
+
+genRemoteData'4 :: Gen RemoteData
+genRemoteData'4 = Arb.sum
+  $ Record.union
+      { "Loading": arbitrary ~ arbitrary ~ chooseInt 0 100
+      }
+  $ initSum MyInit
+
+-- And finally we can combine the sum and record mechanism. E.g. below we
+-- generically generate everything except the `status` field in the `Success` case:
+
+genRemoteData'5 :: Gen RemoteData
+genRemoteData'5 = Arb.sum
+  $ Record.union
+      { "Success": Arb.record
+          $ Record.union
+              { status: chooseInt 200 500
+              }
+          $ initRecord MyInit
+      }
+  $ initSum MyInit
