@@ -253,3 +253,15 @@ genRemoteData'4 = Arb.sum
 ```
 And finally we can combine the sum and record mechanism. E.g. below we
 generically generate everything except the `status` field in the `Success` case:
+```hs
+genRemoteData'5 :: Gen RemoteData
+genRemoteData'5 = Arb.sum
+  $ Record.union
+      { "Success": Arb.record
+          $ Record.union
+              { status: chooseInt 200 500
+              }
+          $ initRecord MyInit
+      }
+  $ initSum MyInit
+```

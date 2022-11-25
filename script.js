@@ -27,6 +27,8 @@ const parse = (str) => {
         }
     }
 
+    swap()
+
     return out
 }
 
