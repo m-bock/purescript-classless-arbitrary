@@ -16,7 +16,6 @@ const parse = (str) => {
         isComment = !isComment
     }
 
-
     for (const line of lines) {
         if (line.startsWith("--")) {
             if (!isComment) swap()
@@ -50,14 +49,10 @@ const print = (data) => {
 
 
 const main = () => {
-
     const lines = fs.readFileSync(inPath).toString()
-
-
     const data = parse(lines)
-
     const str = print(data)
-
+    
     fs.writeFileSync(outPath, str)
 }
 

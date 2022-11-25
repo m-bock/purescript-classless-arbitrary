@@ -28,7 +28,7 @@ type Items = Array
   )
 ```
 We can define a random generator of type `Gen Items` by reproducing the
-nesting with those primitives and combinators:
+nested structure with those primitives and combinators:
 ```hs
 genItems'1 :: Gen Items
 genItems'1 = Arb.array
@@ -49,12 +49,11 @@ customInt = chooseInt 10 20
 This library is using QuickCheck's `Gen` type, so you can use whatever
 already exists for this type.
 
+### Record types
 This works well for homogenous types like Arrays or Maybes. Things get a bit
 more interesting when we like to write generators in this
 style for heterogenous structures like Records. Let's say we'd like to
 generate values for the following record type:
-
-### Record types
 ```hs
 type User =
   { name :: String
@@ -97,7 +96,7 @@ derive instance Generic RemoteData _
 We can now use the `Arb.sum` function with a specification of how each field
 in the type should be correlated with a generator. If there are no arguments,
 we use `noArgs`. If we have a product of arguments we use the `~` operator to
-list generators for the field. The syntax is inspired by the [routing-duplex package](https://pursuit.purescript.org/packages/purescript-routing-duplex/0.4.1)
+list generators for the fields. The syntax is inspired by the [routing-duplex package](https://pursuit.purescript.org/packages/purescript-routing-duplex/0.4.1)
 ```hs
 genRemoteData'1 :: Gen RemoteData
 genRemoteData'1 = Arb.sum
@@ -118,12 +117,12 @@ correct labels and all the other types align to the target type.
 At this moment we have some powerful combinators to create Generators for
 most of the common data structures that we use in a program. And we have fine
 grained control over how each piece of a type should be generated. The
-downside of it is, that it we have to manually write the Generators for each
+downside of it is, that we have to manually write the Generators for each
 type. As the name suggests, this "classless" package does not provide a
 type class. But you can define a type class yourself. And the package is
 designed to make this as boilerplate free as possible. The advantage of
 defining the type class at your side is that you can write instances for every
-type without the headache of orphan instances ans Newtype wrappers.
+type without the headache of orphan instances and Newtype wrappers.
 
 Let's see how this works:
 ```hs
@@ -155,12 +154,12 @@ So far this, should be quite familiar and not surprising. We defined instances
 for a couple of concrete types like String or Boolean. As well as a couple of
 combined types like `Array a` which refer to our instance to fill the values
 of the generic type parameters. This does not work that easily for constructs
-like records. Because they're complete heterogenous, meaning they can contain an
+like records. Because they're completely heterogenous, meaning they can contain an
 arbitrary amount of different types. Now we need a trick to "pass" our own
 type class implementation to a generic function that traverses the record
 fields. The concept that is used here is inspired by the [heterogeneous
 package](https://github.com/thought2/purescript-heterogeneous) and is well
-documented in the libraries README.
+documented in the librarie's README.
 
 We define a "dummy" data type and write an instance of the `Init` type class
 for it:
@@ -170,22 +169,22 @@ data MyInit = MyInit
 instance (MyArbitrary a) => Init MyInit (Gen a) where
   init _ = arbitrary
 ```
-Now we habe everything we need to define a typeclass instance for records
+Now we have everything we need to define a type class instance for records
 like this:
 ```hs
 instance (Arb.Record r' r, InitRecord MyInit r') => MyArbitrary (Record r) where
   arbitrary = Arb.record $ initRecord MyInit
 ```
-And for sum types we can define the following helper functions which may be
+And for sum types we can define the following helper function which may be
 familiar to you (see e.g. genericShow)
 ```hs
 genericSum :: forall r' a. Arb.Sum r' a => InitSum MyInit r' => Gen a
 genericSum = Arb.sum $ initSum MyInit
 ```
-It does not matter if you habe not fully understood the details of the
-previous section. It's just important to not that we have created a type
+It does not matter if you have not fully understood the details of the
+previous section. It's just important to note that we have created a type
 class that is able to produce the three sample Generators we defined earlier
-completely generically: 
+completely generically:
 ```hs
 genItems'2 :: Gen Items
 genItems'2 = arbitrary
@@ -200,7 +199,7 @@ genRemoteData'2 = genericSum
 
 This is very convenient but what we lose here is the ability to define
 different generators for the same types that somewhere occur. Every integer
-is generated in the same way and without Newtype wrappers there's no way to
+is generated in the same way and without Newtype wrappers there would be no way to
 opt in for the `chooseInt` implementation that is explained above.
 
 Depending on the use case we can chose the one or the other approach. But
@@ -220,8 +219,8 @@ genUser'' = Arb.record
 before we pass field specification to the `Arb.record` function, we just
 merge it with our manually defined subset of the spec and there we go.
 The inference is optimized in such a way that this even works if the types
-that you specify manually have no instances in for your type class. As you can
-see below, the int is generated by the type class that for char there's no
+that you specify manually have no instances for your type class. As you can
+see below, the integer is generated by the type class but for char there's no
 instance so we have to merge it into the spec:
 ```hs
 genAB :: Gen { a :: Int, b :: Char }
@@ -252,7 +251,7 @@ genRemoteData'4 = Arb.sum
   $ initSum MyInit
 ```
 And finally we can combine the sum and record mechanism. E.g. below we
-generically generate everything except the `status` field in the `Success` case:
+generically retrieve everything except the `status` field in the `Success` case:
 ```hs
 genRemoteData'5 :: Gen RemoteData
 genRemoteData'5 = Arb.sum
