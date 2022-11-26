@@ -1,4 +1,10 @@
 # classless-arbitrary
+## Installation
+```
+spago install classless
+spago install classless-arbitrary
+```
+
 ## Usage
 ### Imports
 For the examples in this document you'll need the following imports:
@@ -208,8 +214,8 @@ wouldn't it be nice to have a combination of both somehow?
 Let's try to write a Generator for the `User` record type above where every
 field except one is derived by the type class.
 ```hs
-genUser'' :: Gen User
-genUser'' = Arb.record
+genUser'3 :: Gen User
+genUser'3 = Arb.record
   $ Record.union
       { age: chooseInt 0 100
       }
@@ -264,3 +270,6 @@ genRemoteData'5 = Arb.sum
       }
   $ initSum MyInit
 ```
+
+## Documentation
+Module documentation is [published on Pursuit](http://pursuit.purescript.org/packages/purescript-classless-arbitrary).
